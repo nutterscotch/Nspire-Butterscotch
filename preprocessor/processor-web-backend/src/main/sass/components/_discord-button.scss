@@ -1,0 +1,203 @@
+@use "../placeholders/reset-button-styling";
+
+// This is somewhat of an hack, we use :where to lower the specificity of the button rules
+:where(a, a:visited) {
+    color: var(--link-color);
+    transition: 0.25s;
+
+    &:hover {
+        color: oklch(from var(--link-color) calc(l - .1) c h)
+    }
+}
+
+// We shouldn't wrap buttons inside a tags! But here's a solution for the underline...
+a:has(.discord-button) {
+  text-decoration: none;
+}
+
+.discord-button {
+    --button-color: #757575;
+    box-shadow: inset 0px 0.5px 0px oklch(from var(--button-color) calc(l + .1) c h), var(--shadow-elevation-1);
+    @extend %reset-button-styling;
+    color: white;
+    font-weight: bold;
+    border-radius: var(--nice-border-radius);
+    padding: 0.25em 1em;
+    transition-duration: 0.25s;
+    opacity: 1;
+    background-color: var(--button-color);
+    border: 1px solid var(--soft-border-color);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    // Useful if the screen is tiny enough that it causes a line break within the button
+    text-align: center;
+
+    &.text-with-icon {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+
+        svg {
+            width: 1em;
+            height: 1em;
+            translate: 0;
+        }
+    }
+
+    .loading-text-wrapper {
+      display: none;
+      img {
+        height: 1em;
+      }
+    }
+
+    &.bliss-request {
+      div {
+        display: none;
+      }
+
+      .loading-text-wrapper {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+    }
+
+    // For anchor tags that looks like buttons
+    &.bliss-discord-like-loading-button {
+        .loading-text-wrapper {
+            display: none;
+            img {
+                height: 1em;
+            }
+        }
+
+        &.bliss-request {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed;
+
+            div {
+                display: none;
+            }
+
+            .loading-text-wrapper {
+                display: flex;
+                gap: 4px;
+                align-items: center;
+            }
+        }
+    }
+
+    &:hover {
+        background-color: oklch(from var(--button-color) calc(l - .1) c h);
+    }
+
+    &:disabled {
+        --button-color: #757575;
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    // For anchor links that look like buttons
+    &[aria-disabled="true"] {
+        --button-color: #757575;
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    &.primary {
+        --button-color: var(--loritta-blue);
+    }
+
+    &.success {
+        --button-color: #298546;
+    }
+
+    &.danger {
+        --button-color: #da373c;
+    }
+
+    &.no-background-light-text {
+        background-color: initial;
+        color: #ffffff;
+        box-shadow: initial;
+
+        &:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+    }
+
+    &.no-background-dark-text {
+        background-color: initial;
+        color: #000000;
+        box-shadow: initial;
+
+        &:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+    }
+
+    &.no-background-theme-dependent-light-text {
+        background-color: initial;
+        color: var(--button-no-background-light-text-color);
+      box-shadow: initial;
+
+        &:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+    }
+
+    &.no-background-theme-dependent-dark-text {
+        background-color: initial;
+        color: var(--button-no-background-dark-text-color);
+        box-shadow: initial;
+
+        &:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+    }
+}
+
+.bounce-icon-to-the-left-on-hover {
+    &:hover {
+        svg {
+            animation: 1s go-back-bounce infinite;
+        }
+    }
+}
+
+@keyframes go-back-bounce {
+    0% {
+        translate: 0;
+    }
+
+    50% {
+        translate: -2px;
+    }
+
+    100% {
+        translate: 0;
+    }
+}
+
+// Overrides when using links as buttons
+a.discord-button {
+    // Remove the underline
+    text-decoration: none;
+}
+
+.modal-wrapper {
+    .buttons-wrapper {
+        .discord-button {
+            // Buttons in modals have bigger padding
+            padding: 0.5em 1em;
+
+            &.no-background {
+                // And the no background button has a black font
+                color: black;
+            }
+        }
+    }
+}

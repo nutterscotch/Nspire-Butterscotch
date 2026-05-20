@@ -1,0 +1,58 @@
+input[type=text], input[type=number], input[type=password], input[type=file], textarea {
+    border: 1px solid var(--card-border-color);
+    border-radius: var(--nice-border-radius);
+    background-color: var(--inset-background-color);
+    padding: 8px;
+    width: 100%;
+    color: var(--content-text-color);
+    transition-duration: 0.25s;
+    outline: 0 solid rgba(var(--butterscotch-blue-rgb), 0.5);
+    transition: height 0s, border-color 0.25s, outline 0.25s, background-color 0.25s;
+
+    &:focus:not([disabled]) {
+        background-color: var(--inset-background-color);
+        outline: 2px solid rgba(var(--butterscotch-blue-rgb), 0.5);
+        border-color: var(--butterscotch-blue);
+    }
+
+    &:hover:not([disabled]) {
+        background-color: var(--inset-background-color);
+        border-color: var(--butterscotch-blue);
+        outline: 4px solid rgba(var(--butterscotch-blue-rgb), 0.5);
+    }
+
+    &:focus-visible:not([disabled]) {
+        outline: 2px solid var(--butterscotch-blue);
+        border-color: var(--butterscotch-blue);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+input[type=text], input[type=password] {
+    height: 40px;
+}
+
+input[type=file] {
+    height: 40px;
+    cursor: pointer;
+
+    &::file-selector-button {
+        background-color: var(--butterscotch-blue);
+        color: white;
+        border: none;
+        border-radius: var(--nice-border-radius);
+        padding: 4px 12px;
+        font-weight: bold;
+        cursor: pointer;
+        margin-right: 8px;
+    }
+}
+
+textarea {
+    resize: vertical;
+    min-height: 5em;
+}

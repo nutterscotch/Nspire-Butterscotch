@@ -1,0 +1,17 @@
+.progress-log {
+    background-color: var(--inset-background-color);
+    border: 1px solid var(--card-border-color);
+    border-top-color: var(--card-border-highlight-color);
+    border-radius: var(--nice-border-radius);
+    padding: 12px;
+    overflow: auto;
+    max-height: 400px;
+    font-size: 12px;
+    font-family: "Cascadia Code", "JetBrains Mono", "Fira Code", monospace;
+    white-space: pre-wrap;
+    color: var(--content-text-color);
+
+    .log-entry {
+        padding: 1px 0;
+    }
+}

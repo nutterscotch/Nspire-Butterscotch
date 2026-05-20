@@ -1,0 +1,40 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  DOCKER_USERNAME: "${{ github.actor }}"
+  DOCKER_PASSWORD: "${{ secrets.GITHUB_TOKEN }}"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
+      # We don't use the "jib" task due to https://github.com/GoogleContainerTools/jib/issues/4301
+      - name: Build and Publish with Gradle
+        run: ./gradlew build :processor-web-backend:jibDockerBuild --no-daemon
+
+      - name: Login and push Docker image
+        run: |
+          docker login --username $DOCKER_USERNAME --password $DOCKER_PASSWORD ghcr.io
+          docker push ghcr.io/mrpowergamerbr/butterscotchpreprocessor:latest
