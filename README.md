@@ -1,3 +1,15 @@
+# Butterscotch Nspire Port
+Butterscotch port for the TI-Nspire CX II (CAS). May also work on the TI-Nspire CX or god forbid the MONOCHROME TI-Nspire Click/Touchpad but I don't have either of those devices so I can't test.
+> [!CAUTION]
+> So like most of the Nspire renderer is LLM slop so if it explodes your nspire you have been warned. I'll rewrite it or at least try to comprehend what the ever loving fuck my SLOPerator is puking out soon:tm: when I finish real life shit. Honestly I'm suprised it runs half decently for LLM slop. College Board has my ass rn 🤞🥀
+
+Also if the sprites look fucked thats because I downsampled them HARD. The battle box is also looks fucked because of some 640x480 to 320x240 downscaling shenanigans
+
+> [!IMPORTANT]  
+> YOU NEED NDLESS IF YOU DONT HAVE NEEDLESS TEXAS INSTRUMENTS WILL COME TO YOUR HOUSE AT 3AM AND TAKE YOUR CALC (short for claculator)
+
+***
+# Original Readme:
 <h1 align="center">🥧 Butterscotch 🥧</h1>
 
 <!-- Badges, about the GitHub repository itself -->
