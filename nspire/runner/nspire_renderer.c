@@ -1,5 +1,7 @@
 #include "nspire_renderer.h"
 
+#include <string.h>
+
 void NspireRenderer_init(NspireRenderer* r, uint16_t* fb, int32_t w, int32_t h) {
     r->fb = fb;
     r->fbW = w;
@@ -1053,6 +1055,81 @@ void NspireRenderer_blitSurface(
                 s = (uint16_t) ((r5 << 11) | (g6 << 5) | b5);
             }
             dp[px] = opaque ? s : nspire_blend565(s, dp[px], aw);
+        }
+    }
+}
+
+// ===[ Raw RGB565 blits (runtime sprites — sprite_create_from_surface) ]===
+
+void NspireRenderer_drawSpritePart16(
+    NspireRenderer* r,
+    const uint16_t* src, int32_t srcStridePx,
+    int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
+    int32_t destX, int32_t destY
+) {
+    // Scissor in fb coords.
+    int32_t scX0 = r->scissorX, scY0 = r->scissorY;
+    int32_t scX1 = scX0 + r->scissorW, scY1 = scY0 + r->scissorH;
+    if (scX0 < 0) scX0 = 0;
+    if (scY0 < 0) scY0 = 0;
+    if (scX1 > r->fbW) scX1 = r->fbW;
+    if (scY1 > r->fbH) scY1 = r->fbH;
+
+    // Clip dest rect (destX..destX+srcW, destY..destY+srcH) against scissor.
+    int32_t skipL = (destX < scX0) ? (scX0 - destX) : 0;
+    int32_t skipT = (destY < scY0) ? (scY0 - destY) : 0;
+    int32_t x0 = destX + skipL, y0 = destY + skipT;
+    int32_t x1 = destX + srcW, y1 = destY + srcH;
+    if (x1 > scX1) x1 = scX1;
+    if (y1 > scY1) y1 = scY1;
+    int32_t w = x1 - x0, h = y1 - y0;
+    if (w <= 0 || h <= 0) return;
+
+    const uint16_t* srcRow = src + (srcY + skipT) * srcStridePx + (srcX + skipL);
+    uint16_t*       dstRow = r->fb + y0 * r->fbW + x0;
+    for (int32_t row = 0; row < h; row++) {
+        // RGB565 raw, no transparency key. memcpy beats per-pixel loop.
+        memcpy(dstRow, srcRow, (size_t) w * sizeof(uint16_t));
+        srcRow += srcStridePx;
+        dstRow += r->fbW;
+    }
+}
+
+void NspireRenderer_drawSpritePart16Stretched(
+    NspireRenderer* r,
+    const uint16_t* src, int32_t srcStridePx,
+    int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
+    int32_t destX, int32_t destY, int32_t destW, int32_t destH
+) {
+    if (destW <= 0 || destH <= 0 || srcW <= 0 || srcH <= 0) return;
+
+    int32_t scX0 = r->scissorX, scY0 = r->scissorY;
+    int32_t scX1 = scX0 + r->scissorW, scY1 = scY0 + r->scissorH;
+    if (scX0 < 0) scX0 = 0;
+    if (scY0 < 0) scY0 = 0;
+    if (scX1 > r->fbW) scX1 = r->fbW;
+    if (scY1 > r->fbH) scY1 = r->fbH;
+
+    // 16.16 fixed-point inverse-mapping step (matches the paletted stretched paths).
+    int32_t stepX = (int32_t) (((int64_t) srcW << 16) / destW);
+    int32_t stepY = (int32_t) (((int64_t) srcH << 16) / destH);
+
+    int32_t x0 = destX, y0 = destY;
+    int32_t x1 = destX + destW, y1 = destY + destH;
+    if (x0 < scX0) x0 = scX0;
+    if (y0 < scY0) y0 = scY0;
+    if (x1 > scX1) x1 = scX1;
+    if (y1 > scY1) y1 = scY1;
+    if (x0 >= x1 || y0 >= y1) return;
+
+    for (int32_t y = y0; y < y1; y++) {
+        int32_t srcYIdx = srcY + (((int32_t)(y - destY) * stepY) >> 16);
+        const uint16_t* srcRow = src + srcYIdx * srcStridePx;
+        uint16_t*       dstRow = r->fb + y * r->fbW;
+        int32_t srcXFP = ((int32_t)(x0 - destX) * stepX);
+        for (int32_t x = x0; x < x1; x++) {
+            dstRow[x] = srcRow[srcX + (srcXFP >> 16)];
+            srcXFP += stepX;
         }
     }
 }

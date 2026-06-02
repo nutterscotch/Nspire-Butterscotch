@@ -16,6 +16,9 @@ import java.security.MessageDigest
 class ButterscotchPreprocessorWebServer(
     private val jsBundle: String,
     private val cssBundle: String,
+    // The TI-Nspire runner served at /assets/engine.tns and bundled into the ZIP
+    // by the frontend. Null when no engine.tns was packaged at build time.
+    private val engineTns: ByteArray? = null,
 ) {
     private val jsBundleHash = md5Hex(jsBundle.toByteArray())
     private val cssBundleHash = md5Hex(cssBundle.toByteArray())
@@ -76,7 +79,12 @@ class ButterscotchPreprocessorWebServer(
                                         }
                                     }
                                     b {
-                                        text("Requires Ndless. Extract the ZIP into a folder on the calculator alongside engine.tns and run engine.tns.")
+                                        text(
+                                            if (engineTns != null)
+                                                "Requires Ndless. The runner (engine.tns) is included. Extract the ZIP and copy the bs folder into My Documents on the calculator, then run bs/engine.tns."
+                                            else
+                                                "Requires Ndless. Extract the ZIP and copy the bs folder into My Documents on the calculator (add engine.tns to it), then run bs/engine.tns."
+                                        )
                                     }
 
                                     hr {}
@@ -109,6 +117,19 @@ class ButterscotchPreprocessorWebServer(
                         cssBundle,
                         contentType = ContentType.Text.CSS
                     )
+                }
+
+                // The TI-Nspire runner. The frontend fetches this and bundles it
+                // into the generated ZIP so the download is complete and ready to
+                // run. 404 when no engine.tns was packaged at build time — the
+                // frontend then falls back to a runner-less ZIP with a warning.
+                get("/assets/engine.tns") {
+                    val bytes = engineTns
+                    if (bytes == null) {
+                        call.respond(HttpStatusCode.NotFound, "engine.tns not bundled")
+                    } else {
+                        call.respondBytes(bytes, ContentType.Application.OctetStream)
+                    }
                 }
 
             }

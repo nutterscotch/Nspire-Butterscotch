@@ -396,7 +396,7 @@ void NspireOverlay_drawDebugHud(NspireOverlay* o, const struct Runner* runner, f
 
     // Darken a strip behind the text (50% alpha) so it stays legible while the
     // game behind it is still visible.
-    int32_t bgH = lineH * 9 + 2;
+    int32_t bgH = lineH * 12 + 2;
     NspireRenderer_blendRect(fb, 0, 0, fb->fbW, bgH, shade, 128);
 
     snprintf(line, sizeof(line), "Room: %s", roomName);
@@ -428,6 +428,33 @@ void NspireOverlay_drawDebugHud(NspireOverlay* o, const struct Runner* runner, f
     snprintf(line, sizeof(line), "tri %uc %uk  spr %uc %uk",
              (unsigned) gNspireDrawStats.triCalls, (unsigned) (gNspireDrawStats.triPx / 1000u),
              (unsigned) gNspireDrawStats.sprCalls, (unsigned) (gNspireDrawStats.sprPx / 1000u));
+    NspireOverlay_drawTextScaled(fb, x, y, white, 1, line); y += lineH;
+
+    // Surface-snapshot counters (createSpriteFromSurface). live = currently
+    // allocated runtime sprites; tot = lifetime creates so a brief flash of
+    // activity (e.g. Muffet's box init) is still visible after the sprite is
+    // freed. Both stay 0 unless built with -DNS_ENABLE_SURFACE_SNAPSHOT=1.
+    snprintf(line, sizeof(line), "snap %u live  %u tot",
+             (unsigned) gNspireDrawStats.snapLive,
+             (unsigned) gNspireDrawStats.snapCreates);
+    NspireOverlay_drawTextScaled(fb, x, y, white, 1, line); y += lineH;
+
+    // Source rect of the most recent snapshot, in fb pixels. If this matches
+    // the Muffet box's screen location (~120,80 80x80-ish post-halve) the
+    // capture was right; if it's at 0,0 or tiny, capture is misaligned.
+    snprintf(line, sizeof(line), "src %ld,%ld %ldx%ld",
+             (long) gNspireDrawStats.snapLastSrcX, (long) gNspireDrawStats.snapLastSrcY,
+             (long) gNspireDrawStats.snapLastSrcW, (long) gNspireDrawStats.snapLastSrcH);
+    NspireOverlay_drawTextScaled(fb, x, y, white, 1, line); y += lineH;
+
+    // Runtime-sprite draw counter + last draw position. If runD stays 0 in
+    // Muffet, the game's draw call isn't reaching our runtime dispatch (the
+    // sprite's tpagIndex isn't resolving to our extended-tail range). If runD
+    // increments but the box is still black, the dispatch works and the
+    // problem is in the captured pixels or the draw-back path itself.
+    snprintf(line, sizeof(line), "runD %u  @%ld,%ld",
+             (unsigned) gNspireDrawStats.runSprDraws,
+             (long) gNspireDrawStats.runLastDrawX, (long) gNspireDrawStats.runLastDrawY);
     NspireOverlay_drawTextScaled(fb, x, y, white, 1, line); y += lineH;
 
     snprintf(line, sizeof(line), "Heap free: %lu KB", (unsigned long) (freeBytes / 1024));

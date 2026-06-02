@@ -40,6 +40,41 @@ tasks {
         from(project(":processor-web").file("src/jsMain/resources/butterscotch.elf")) {
             into("web/")
         }
+
+        // Copy the TI-Nspire runner (engine.tns) so the backend can serve it at
+        // /assets/engine.tns and the frontend can bundle it straight into the
+        // generated ZIP. The download is then a complete, ready-to-run package
+        // (engine.tns + cooked .tns data) instead of requiring the user to source
+        // the runner separately. (Same direct-from-source-resources copy pattern
+        // as butterscotch.elf above; a missing file is silently skipped by Gradle.)
+        from(project(":processor-web").file("src/jsMain/resources/engine.tns")) {
+            into("web/")
+        }
+    }
+}
+
+// Assemble a fully STATIC version of the site into build/static-site/ for free
+// static hosts (Cloudflare Pages, Netlify, GitHub Pages, ...). The whole cook runs
+// client-side in a Web Worker — the backend only ever served static files — so this
+// bundles those same files (JS, CSS, engine.tns) plus a prebuilt index.html. No JVM,
+// no server, no cold starts. Run: ./gradlew :processor-web-backend:staticSite
+tasks.register<Copy>("staticSite") {
+    group = "distribution"
+    description = "Builds a static, server-less version of the site into build/static-site/"
+    dependsOn(frontendJsBundle, sassStyle)
+
+    val outDir = layout.buildDirectory.dir("static-site")
+    into(outDir)
+
+    // Same /assets/ layout the absolute URLs in the page + worker expect.
+    from(frontendJsBundle) { into("assets/js") }
+    from(sassStyle) { into("assets/css") }
+    from(project(":processor-web").file("src/jsMain/resources/engine.tns")) { into("assets") }
+    from("src/main/static") // index.html at the site root
+
+    doLast {
+        logger.lifecycle("Static site assembled at: ${outDir.get().asFile}")
+        logger.lifecycle("Deploy that folder to any static host (it serves from /).")
     }
 }
 

@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Butterscotch Preprocessor</title>
+    <link rel="stylesheet" href="/assets/css/style.css">
+</head>
+<body>
+<div class="sync-with-system-theme" id="app-wrapper">
+    <div id="content-wrapper">
+        <h1>Butterscotch (TI-Nspire)</h1>
+        <p>Butterscotch is an open source re-implementation of GameMaker: Studio's runner.</p>
+        <p>Generate a TI-Nspire CX II package (ZIP of .tns files) for a GameMaker: Studio game. Tested with Undertale and DELTARUNE.</p>
+        <p><b>Upstream Butterscotch Project URL: </b><a href="https://github.com/MrPowerGamerBR/Butterscotch">https://github.com/MrPowerGamerBR/Butterscotch</a></p>
+        <h2>Tested Hardware</h2>
+        <ul>
+            <li>TI-Nspire CX II / CX II CAS (primary target, color)</li>
+            <li>MAYBE Nspire CX/CXCAS</li>
+        </ul>
+        <b>Requires Ndless. The runner (engine.tns) is included. Extract the ZIP and copy the bs folder into My Documents on the calculator, then run bs/engine.tns.</b>
+        <hr>
+        <!-- Compose HTML mounts here -->
+        <div id="root"></div>
+    </div>
+</div>
+<!-- Everything runs client-side: the cook happens in a Web Worker spawned from
+     processor-web.js, so this page is fully static (no backend). jsBundleHash is
+     only used to cache-bust the worker URL; a fixed value is fine for a static host. -->
+<script>window.jsBundleHash = "static";</script>
+<script src="/assets/js/processor-web.js?v=static"></script>
+</body>
+</html>

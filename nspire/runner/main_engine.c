@@ -17,6 +17,7 @@
 #include "vm.h"
 #include "rvalue.h"
 #include "runner.h"
+#include "json_reader.h"
 #include "noop_file_system.h"
 #include "noop_audio_system.h"
 #include "audio_system.h"
@@ -54,6 +55,38 @@ static void log_flush(const char* fmt, ...) {
 // Reservation block: malloc'd at startup when the heap is fresh and unfragmented, freed
 // right before CODE parses so newlib's allocator can satisfy the 5+ MB bytecodeBuffer alloc.
 static void* codeHeapReservation = NULL;
+
+// Reads the optional cooked config the web preprocessor emits (config.tns: a
+// tiny JSON blob alongside the .tns assets) and returns the debugMode flag. This
+// is the Nspire analog of the PS2 target's CONFIG.JSN "debugOverlayEnabled" key.
+// When debugMode is true the stats overlay and the debug hotkeys (pause, room
+// warp, global-reset, uncap, etc.) are active; when false both are suppressed and
+// only game input reaches the engine. Default when the file is absent/unparseable
+// is TRUE so hand-managed /documents/bs/ folders (no config) keep the dev workflow
+// — preprocessor-generated bundles always ship an explicit config.tns.
+static bool load_debug_mode(void) {
+    FILE* f = fopen(ASSET_DIR "config.tns", "rb");
+    if (!f) return true;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0) { fclose(f); return true; }
+    char* text = (char*) malloc((size_t) sz + 1);
+    if (!text) { fclose(f); return true; }
+    size_t rd = fread(text, 1, (size_t) sz, f);
+    text[rd] = '\0';
+    fclose(f);
+
+    JsonValue* root = JsonReader_parse(text);
+    free(text);
+    if (!root) return true;
+
+    bool debugMode = true;  // default when the key is missing
+    JsonValue* dm = JsonReader_getObject(root, "debugMode");
+    if (dm && JsonReader_isBool(dm)) debugMode = JsonReader_getBool(dm);
+    JsonReader_free(root);
+    return debugMode;
+}
 
 static void parse_progress_cb(const char* chunkName, int chunkIndex, int totalChunks, uint32_t chunkLength, DataWin* dataWin, void* userData) {
     (void) userData;
@@ -101,8 +134,13 @@ int main(void) {
     // NspireOverlay_init returns a sensible number too.
     NspireRenderer_init(&gOverlayFb, framebuffer, NSPIRE_FB_W, NSPIRE_FB_H);
     NspireOverlay_init(&gOverlay, &gOverlayFb, NULL);
-    // Default state: enabled (user asked for the overlay to be on). Toggleable later with T.
-    NspireOverlay_setState(&gOverlay, NSPIRE_OVERLAY_ENABLED);
+    // Debug mode comes from the cooked config (config.tns). It gates the stats
+    // overlay AND the debug hotkeys together. The loading screen below is drawn
+    // unconditionally (NspireOverlay_drawLoadingScreen ignores the overlay state),
+    // so a release/debug-off build still shows load progress — only the in-game
+    // debug HUD and hotkeys are suppressed.
+    bool debugMode = load_debug_mode();
+    NspireOverlay_setState(&gOverlay, debugMode ? NSPIRE_OVERLAY_ENABLED : NSPIRE_OVERLAY_DISABLED);
     gOverlayReady = true;
 
     NspireAssets assetsStorage;
@@ -183,7 +221,7 @@ int main(void) {
     VMContext* vm = VM_create(dataWin);
     Renderer* renderer = NspireEngineRenderer_create(assets, framebuffer, NSPIRE_FB_W, NSPIRE_FB_H);
     Runner* runner = Runner_create(dataWin, vm, renderer, fs, audioSys);
-    if (runner) runner->debugMode = true;
+    if (runner) runner->debugMode = debugMode;
     if (!runner) {
         log_flush("FAIL: Runner_create\n");
         wait_key_pressed();
@@ -263,9 +301,17 @@ int main(void) {
     wait_key_pressed();
 
     // ===[ 4. Render loop ]===
-    // Tear down the console so the LCD is ours alone.
-
-
+    // Switch the LCD out of the OS console (nio text mode) into a 320x240
+    // RGB565 framebuffer the panel will scan from. Without this, lcd_blit
+    // writes go to a buffer the LCD isn't reading and the console stays
+    // visible — same pattern as main.c / clock_test.c, which always worked.
+    // Paired with the genzehn `--uses-lcd-blit true --240x320-support true`
+    // flags in the Makefile, which tell the Ndless loader to set this up.
+    if (!lcd_init(SCR_320x240_565)) {
+        log_flush("FAIL: lcd_init(SCR_320x240_565)\n");
+        wait_key_pressed();
+        return 5;
+    }
 
     int32_t frameCount = 0;
     int32_t lastRoomIndex = -1;
@@ -310,7 +356,11 @@ int main(void) {
     keys[18] = KEY_NSPIRE_U;       // Toggle uncap (no FPS cap when on)
     keys[19] = KEY_NSPIRE_N;       // Toggle: force text through the native 1:1 blit (diag)
 
+    // Both gated by runner->debugMode (config.tns). Declared here, outside the
+    // loop, because the frame-cap logic below reads `uncap` even though only the
+    // debug-hotkey block (further down) ever flips these.
     bool debugPaused = false;
+    bool uncap = false;
 
     // ---- Frame-cap timing setup ----
     // 0x900D0024 read as a 32768 Hz counter in bare clock_test, but its
@@ -385,12 +435,15 @@ int main(void) {
             else if (!nowDown && wasDown) RunnerKeyboard_onKeyUp(runner->keyboard, KEYMAP_GML[k]);
         }
 
-        // Butterscotch debug hotkeys (PageUp/Down = +/- on Nspire keypad).
+        // Butterscotch debug hotkeys — gated entirely on debug mode (config.tns).
+        // When debug is off only game keys (handled in the reconcile loop above)
+        // reach the engine; none of the pause/warp/reset/overlay-toggle actions fire.
+        // PageUp/Down = +/- on the Nspire keypad.
+        if (runner->debugMode) {
         if (RunnerKeyboard_checkPressed(runner->keyboard, 'P')) debugPaused = !debugPaused;
         if (RunnerKeyboard_checkPressed(runner->keyboard, 'T')) NspireOverlay_toggle(&gOverlay);
         // U toggles the frame-rate cap. When uncapped the game runs as fast as the
         // hardware can manage (handy for benchmarking; also useful in cutscenes).
-        static bool uncap = false;
         if (RunnerKeyboard_checkPressed(runner->keyboard, 'U')) uncap = !uncap;
 
         // 'A' warps to room 330 (room_asrielappears) for testing the final battle scene.
@@ -435,6 +488,7 @@ int main(void) {
         }
 
         (void) diagSetPendingRoom; (void) diagCheckPressedPU;
+        } // end debug-hotkey gate (runner->debugMode)
 
         bool shouldStep = !debugPaused || RunnerKeyboard_checkPressed(runner->keyboard, 'O');
 

@@ -23,6 +23,11 @@ Undertale/
 obj/
 nspire/runner/builds/
 
+# Exception: the runner the web preprocessor bundles into every generated ZIP is
+# a committed release asset, not a throwaway build artifact. Refresh it with
+# `make -C nspire/runner engine.tns && cp nspire/runner/engine.tns <this path>`.
+!preprocessor/processor-web/src/jsMain/resources/engine.tns
+
 # Gradle / IDE noise
 .gradle/
 .DS_Store

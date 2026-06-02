@@ -59,6 +59,10 @@ fun App(m: ButterscotchPreprocessorWeb) {
     val force4bppPatterns = remember { mutableStateSetOf<String>() }
     var atlasSize by remember { mutableStateOf(1024) }
     var atlasSizeText by remember { mutableStateOf("1024") }
+    // Debug mode: written into the ZIP as config.tns. The runner reads it to gate
+    // the stats overlay AND the debug hotkeys together (PS2's debugOverlayEnabled
+    // analog). Off by default so released games ship clean.
+    var debugMode by remember { mutableStateOf(false) }
     var startTime by remember { mutableStateOf(0.0) }
 
     val scope = rememberCoroutineScope()
@@ -77,12 +81,40 @@ fun App(m: ButterscotchPreprocessorWeb) {
             val textures = result.texturesBin.unsafeCast<ByteArray>()
             val atlas = result.atlasBin.unsafeCast<ByteArray>()
 
+            // Everything lives under a top-level bs/ folder so the archive extracts
+            // into a correctly-named directory: the runner hard-codes /documents/bs/
+            // as its asset + save path, so the user just drops this bs/ folder into
+            // My Documents — no renaming, nothing to get wrong.
+            val dir = "bs/"
             val zip = StoreZipBuilder()
-            zip.add("data.win.tns", slim)
-            zip.add("ATLAS.BIN.tns", atlas)
-            zip.add("CLUT4.BIN.tns", clut4)
-            zip.add("CLUT8.BIN.tns", clut8)
-            zip.add("TEXTURES.BIN.tns", textures)
+            zip.add("${dir}data.win.tns", slim)
+            zip.add("${dir}ATLAS.BIN.tns", atlas)
+            zip.add("${dir}CLUT4.BIN.tns", clut4)
+            zip.add("${dir}CLUT8.BIN.tns", clut8)
+            zip.add("${dir}TEXTURES.BIN.tns", textures)
+
+            // Runtime config the runner reads at startup. Currently just the debug
+            // toggle (stats overlay + debug hotkeys). JSON so more keys can be added
+            // later without changing the file contract. Named .tns so it survives
+            // the calculator's documents filter like the other assets.
+            val configJson = """{"debugMode": $debugMode}"""
+            zip.add("${dir}config.tns", configJson.encodeToByteArray())
+
+            // Bundle the runner itself so the download is a complete, ready-to-run
+            // package. Served by the backend at /assets/engine.tns. If it isn't
+            // available (e.g. a deployment built without a packaged runner), don't
+            // fail the cook — produce the data-only ZIP and warn loudly so the user
+            // knows they still need to supply engine.tns themselves.
+            var bundledRunner = false
+            try {
+                val engine = fetchBinary("/assets/engine.tns")
+                zip.add("${dir}engine.tns", engine)
+                bundledRunner = true
+            } catch (e: Exception) {
+                logMessages.add("WARNING: could not bundle engine.tns (${e.message}). " +
+                        "ZIP contains data only — add engine.tns to the folder yourself.")
+            }
+
             val zipBytes = zip.build()
 
             val safeName = (parsedGameName ?: "butterscotch")
@@ -92,7 +124,8 @@ fun App(m: ButterscotchPreprocessorWeb) {
             downloadFileName = "${safeName}-nspire.zip"
             val blob = Blob(arrayOf(zipBytes), BlobPropertyBag(type = "application/zip"))
             downloadUrl = URL.createObjectURL(blob)
-            status = "Done! Took ${Date.now() - startTime}ms"
+            val runnerNote = if (bundledRunner) " (runner included)" else " (runner NOT included — see log)"
+            status = "Done!$runnerNote Took ${Date.now() - startTime}ms"
         } catch (e: Exception) {
             status = "Error creating ZIP: ${e.message}"
             logMessages.add("Error: ${e.stackTraceToString()}")
@@ -186,7 +219,7 @@ fun App(m: ButterscotchPreprocessorWeb) {
 
     if (parsedGameName != null && !processing && downloadUrl == null) {
         P {
-            Text("Output is a ZIP of five .tns files (data.win.tns + ATLAS/CLUT4/CLUT8/TEXTURES.BIN.tns). Extract into a folder on the calculator alongside engine.tns. Audio is stripped (silent); sprites/backgrounds/tiles are 2× box-downsampled to fit 320×240; fonts stay full-res.")
+            Text("Output is a ready-to-run ZIP containing a single bs/ folder (the runner engine.tns plus the cooked data.win.tns + ATLAS/CLUT4/CLUT8/TEXTURES.BIN.tns). Extract it and copy the whole bs folder into My Documents on the calculator, then run bs/engine.tns. Audio is stripped (silent); sprites/backgrounds/tiles are 2× box-downsampled to fit 320×240; fonts stay full-res.")
         }
 
         FieldWrappers {
@@ -200,7 +233,7 @@ fun App(m: ButterscotchPreprocessorWeb) {
                 FieldInformation {
                     Div(attrs = { classes("field-title") }) { Text("Texture Atlas Size") }
                     Div(attrs = { classes("field-description") }) {
-                        Text("Width/height of each atlas page in pixels. Use 1024 for Nspire — lower sizes can silently corrupt large fonts (notably fnt_main on Undertale).")
+                        Text("Width/height of each atlas page in pixels. Use 1024 for Nspire. lower sizes fucks up fonts in untdertale")
                     }
                 }
 
@@ -216,6 +249,16 @@ fun App(m: ButterscotchPreprocessorWeb) {
                     }
                 }
             }
+
+            DiscordToggle(
+                id = "debug-mode",
+                title = "Debug Mode",
+                description = "When on, the in-game stats overlay and debug hotkeys " +
+                        "(pause, room warp, uncap FPS, global-reset) are active. " +
+                        "leave it off if you dont know what youre doing",
+                checked = debugMode,
+                onChange = { debugMode = it }
+            )
         }
 
         Div({ classes("buttons-wrapper") }) {
@@ -303,6 +346,40 @@ fun App(m: ButterscotchPreprocessorWeb) {
                 Text("Go Back")
             }
         }
+    }
+}
+
+// Fetch a binary URL (the bundled runner) into a ByteArray. Uses XMLHttpRequest
+// via dynamic to avoid pinning a specific kotlin-wrappers fetch API — mirrors the
+// dynamic/FileReader style already used in readFileAsBytes below. Resolves only on
+// a 2xx response; any other status or a network error rejects so the caller can
+// fall back to a runner-less ZIP.
+private suspend fun fetchBinary(url: String): ByteArray {
+    return suspendCancellableCoroutine { cont ->
+        val xhr: dynamic = js("new XMLHttpRequest()")
+        xhr.open("GET", url)
+        xhr.responseType = "arraybuffer"
+        xhr.onload = {
+            val statusCode = (xhr.status as Int)
+            if (statusCode in 200..299) {
+                val arrayBuffer = xhr.response as ArrayBuffer
+                val uint8Array = Uint8Array(arrayBuffer)
+                val length = uint8Array.length as Int
+                val bytes = ByteArray(length)
+                for (i in 0 until length) {
+                    bytes[i] = uint8Array[i].toByte()
+                }
+                cont.resume(bytes)
+            } else {
+                cont.resumeWithException(RuntimeException("HTTP $statusCode fetching $url"))
+            }
+            Unit
+        }
+        xhr.onerror = {
+            cont.resumeWithException(RuntimeException("network error fetching $url"))
+            Unit
+        }
+        xhr.send()
     }
 }
 

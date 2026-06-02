@@ -4,6 +4,23 @@
 #include "nspire_renderer.h"
 #include "nspire_asset.h"
 
+#ifndef NS_ENABLE_SURFACE_SNAPSHOT
+#define NS_ENABLE_SURFACE_SNAPSHOT 0
+#endif
+
+// Max concurrent runtime sprites (Muffet only needs 1 at a time; 8 is cheap
+// headroom). We reserve dw->tpag slots for these at init.
+#define NS_RUNTIME_SPRITE_MAX 8
+
+// One snapshot's RGB565 pixel buffer + the data.win sprite index it was
+// assigned. Slot is FREE when pixels == NULL.
+typedef struct {
+    uint16_t* pixels;       // owned; w*h * 2 bytes
+    int32_t   w, h;         // dimensions in fb pixels (post-halve)
+    int32_t   stride;       // bytes per row
+    int32_t   spriteIndex;  // -1 when slot free
+} NspireRuntimeSprite;
+
 // Engine-facing renderer: embeds the engine's `Renderer` struct as its first
 // field so calls to vtable functions resolve correctly. Wraps our framebuffer
 // fast path and the cooked-asset tables.
@@ -56,6 +73,15 @@ typedef struct {
     int32_t savedPortFbX, savedPortFbY;
     int32_t savedScissorX, savedScissorY, savedScissorW, savedScissorH;
     bool    transformSaved;
+
+    // Surface-snapshot runtime sprites. tpagIndex >= originalTPagCount routes
+    // through here instead of the cooked tpag/atlas path. We extend dw->tpag
+    // by NS_RUNTIME_SPRITE_MAX at init so engine code that reads tpag fields
+    // (bounding dims, etc.) sees valid entries; the actual RGB565 pixels live
+    // in runtimeSprites[].
+    uint32_t            originalSpriteCount;  // dw->sprt.count at init
+    uint32_t            originalTPagCount;    // dw->tpag.count at init (== assets->tpagCount)
+    NspireRuntimeSprite runtimeSprites[NS_RUNTIME_SPRITE_MAX];
 } NspireEngineRenderer;
 
 // Allocates a renderer and installs the vtable. The caller owns `assets`.

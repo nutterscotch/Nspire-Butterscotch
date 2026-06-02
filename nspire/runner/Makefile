@@ -98,7 +98,7 @@ engine.elf: $(ENGINE_LINK_OBJS)
 	$(LD) $^ -o $@ $(LDFLAGS) -lsyscalls_nspireio -lnspireio
 
 engine.tns: engine.elf
-	$(GENZEHN) --input $^ --output $@.zehn --name "butterscotch-engine"
+	$(GENZEHN) --input $^ --output $@.zehn --name "butterscotch-engine" --240x320-support true --uses-lcd-blit true
 	make-prg $@.zehn $@
 	rm $@.zehn
 

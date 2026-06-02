@@ -24,6 +24,24 @@ typedef struct {
 typedef struct {
     uint32_t triCalls, sprCalls;
     uint32_t triPx, sprPx;
+    // Surface-snapshot counters (createSpriteFromSurface). Not reset per frame:
+    // snapCreates is the lifetime tally so a brief flash of activity is still
+    // visible after-the-fact; snapLive is the currently-allocated count
+    // (incremented on create, decremented on deleteSprite of a runtime slot).
+    uint32_t snapCreates;
+    uint32_t snapLive;
+    // Source rect of the most recent createSpriteFromSurface call (fb pixels,
+    // post-HR_SCALE_ATLAS). Tells us whether the snapshot captured a sensible
+    // region of the framebuffer (e.g. the Muffet box) or grabbed empty space.
+    int32_t  snapLastSrcX, snapLastSrcY, snapLastSrcW, snapLastSrcH;
+    // Runtime-sprite-draw counter. Incremented only by the dispatch path that
+    // draws a snapshot back. If this stays 0 in Muffet, the game's draw_sprite
+    // call isn't reaching our runtime-tpag branch — the regression is in how
+    // the engine resolves the sprite's tpagIndex, not in the snapshot capture.
+    uint32_t runSprDraws;
+    // Last (x,y) a runtime sprite was drawn at, in fb pixels. Lets us confirm
+    // the snapshot is composited where Muffet's box is supposed to land.
+    int32_t  runLastDrawX, runLastDrawY;
 } NspireDrawStats;
 extern NspireDrawStats gNspireDrawStats;
 
@@ -62,6 +80,25 @@ void NspireRenderer_drawSpritePart4(
     int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
     const uint16_t* palette,
     int32_t destX, int32_t destY
+);
+
+// Raw RGB565 source — no palette, no transparency key. Used for runtime sprites
+// created from the framebuffer via `sprite_create_from_surface(application_surface, …)`
+// (e.g. Undertale's Muffet bullet-box snapshot). `srcStridePx` is the stride of the
+// source buffer in 16-bit pixels (typically srcW for tightly-packed atlases).
+void NspireRenderer_drawSpritePart16(
+    NspireRenderer* r,
+    const uint16_t* src, int32_t srcStridePx,
+    int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
+    int32_t destX, int32_t destY
+);
+
+// Nearest-neighbour stretched RGB565 raw blit. destW/destH may differ from srcW/srcH.
+void NspireRenderer_drawSpritePart16Stretched(
+    NspireRenderer* r,
+    const uint16_t* src, int32_t srcStridePx,
+    int32_t srcX, int32_t srcY, int32_t srcW, int32_t srcH,
+    int32_t destX, int32_t destY, int32_t destW, int32_t destH
 );
 
 // Solid-tint variants for fonts: any non-transparent source pixel writes `color`
